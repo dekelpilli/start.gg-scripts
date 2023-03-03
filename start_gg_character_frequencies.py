@@ -3,7 +3,11 @@ import json
 import requests
 from mergedeep import merge, Strategy
 import os
+import sys
 from collections import Counter
+
+
+DATA_DIR = os.path.dirname(os.path.realpath(sys.argv[0])) + os.sep + "data" + os.sep
 
 
 class TooManyRequestsError(Exception):
@@ -97,6 +101,7 @@ query Chars($slug: String!) {
 }  
 """
 
+
 def build_data(slug):
     variables = {"slug": slug}
     headers = {"Authorization": "Bearer <your token here>"}
@@ -123,7 +128,7 @@ def build_data(slug):
 def create_json_frequencies(slug):
     data = build_data(slug)
 
-    file_name = 'data/' + slug + '/character_frequencies.json'
+    file_name = DATA_DIR + 'slugs/' + slug + '/character_frequencies.json'
     os.makedirs(os.path.dirname(file_name), exist_ok=True)
 
     with open(file_name, 'w+', encoding='utf-8') as slug_file:
@@ -132,14 +137,14 @@ def create_json_frequencies(slug):
     print("\nFile '" + file_name + "'Created.")
 
     totals = {}
-    for path, subdirs, files in os.walk('data/'):
+    for path, subdirs, files in os.walk(DATA_DIR + 'slugs/'):
         for name in files:
             with open(os.path.join(path, name), 'r') as current_slug_file:
                 event_counts = json.load(current_slug_file)
                 counters = {k: Counter(v) for k, v in event_counts.items()}
                 totals = merge(totals, counters, strategy=Strategy.ADDITIVE)
 
-    with open('total_character_frequencies.json', 'w+', encoding='utf-8') as totals_file:
+    with open(DATA_DIR + 'total_character_frequencies.json', 'w+', encoding='utf-8') as totals_file:
         json.dump(totals, totals_file, indent=2)
 
     print("Convert me: https://www.convertcsv.com/json-to-csv.htm")
