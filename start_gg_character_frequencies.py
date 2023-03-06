@@ -76,7 +76,7 @@ def run_query(query, variables, header):
         return
 
 
-EVERYTHING_QUERY = """
+ENTRANT_SELECTIONS_QUERY = """
 query Chars($slug: String!) {
   event(slug: $slug) {
     videogame {
@@ -105,24 +105,27 @@ query Chars($slug: String!) {
 def build_data(slug):
     variables = {"slug": slug}
     headers = {"Authorization": "Bearer <your token here>"}
-    response = run_query(EVERYTHING_QUERY, variables, headers)
+    response = run_query(ENTRANT_SELECTIONS_QUERY, variables, headers)
     result = response['data']['event']
     chars = {character['id']: character['name'] for character in result['videogame']['characters']}
     node_games = [node['games'] for node in result['sets']['nodes'] if node['games'] is not None]
-    game_selections = [game['selections'] for games in node_games for game in games if game is not None]
-    selections = [selection for selections in game_selections for selection in selections]
+    game_selections = [game['selections'] for games in node_games
+                       for game in games if game is not None]
+    selections = [selection for selections in game_selections if selections is not None
+                  for selection in selections]
 
     player_character_choices = [{'player': selection['entrant']['name'],
                                  'character': chars[selection['selectionValue']]}
                                 for selection in selections]
-    char_player_freqs = {}
+    player_char_freqs = {}
+    character_counts = {char: 0 for char in sorted(chars.values())}
     for selection in player_character_choices:
         player = selection['player']
         char = selection['character']
-        char_player_freqs[player] = char_player_freqs.get(player, {char: 0 for char in sorted(chars.values())})
-        char_player_freqs[player][char] = char_player_freqs[player].get(char) + 1
+        player_char_freqs[player] = player_char_freqs.get(player, character_counts.copy())
+        player_char_freqs[player][char] = player_char_freqs[player][char] + 1
 
-    return char_player_freqs
+    return player_char_freqs
 
 
 def create_json_frequencies(slug):
