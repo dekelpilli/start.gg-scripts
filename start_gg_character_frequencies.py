@@ -6,7 +6,6 @@ import os
 import sys
 from collections import Counter
 
-
 DATA_DIR = os.path.dirname(os.path.realpath(sys.argv[0])) + os.sep + "data" + os.sep
 
 
@@ -85,7 +84,7 @@ query Chars($slug: String!) {
             name
         }
     }
-    sets(perPage: 500, page: 1, sortType: RECENT) {
+    sets(perPage: 48, page: 1, sortType: RECENT) {
         nodes {
             games {
                 selections {
@@ -101,20 +100,64 @@ query Chars($slug: String!) {
 }  
 """
 
+SUBSEQUENT_PAGE_QUERY = """
+query Chars($slug: String!, $page: Int) {
+  event(slug: $slug) {
+    sets(perPage: 49, page: $page, sortType: RECENT) {
+        nodes {
+            games {
+                selections {
+                    entrant {
+                        name
+                    }
+                    selectionValue
+                }
+            }
+        }
+    }
+  }
+}
+"""
+
+
+def query_data(slug, headers):
+    # sizes
+    # sets = 6 + 20*numberOfSets
+    # videogame = 29
+    variables = {"slug": slug}
+    main_response = run_query(ENTRANT_SELECTIONS_QUERY, variables, headers)
+    if main_response['extensions']['queryComplexity'] > 980:
+        page = 2
+        while True:
+            variables['page'] = page
+            response = run_query(SUBSEQUENT_PAGE_QUERY, variables, headers)
+            main_response['data']['games'] += response['data']['games']
+            if response['extensions']['queryComplexity'] < 980:
+                break
+            page += 1
+    return main_response['data']
+
+
+def derive_name(entrant_name):
+    sections = entrant_name.split("|")
+    if len(sections) == 1:
+        return entrant_name
+    else:
+        return sections[1].strip()
+
 
 def build_data(slug):
-    variables = {"slug": slug}
     headers = {"Authorization": "Bearer <your token here>"}
-    response = run_query(ENTRANT_SELECTIONS_QUERY, variables, headers)
-    result = response['data']['event']
-    chars = {character['id']: character['name'] for character in result['videogame']['characters']}
-    node_games = [node['games'] for node in result['sets']['nodes'] if node['games'] is not None]
+    response = query_data(slug, headers)
+    event = response['event']
+    chars = {character['id']: character['name'] for character in event['videogame']['characters']}
+    node_games = [node['games'] for node in event['sets']['nodes'] if node['games'] is not None]
     game_selections = [game['selections'] for games in node_games
                        for game in games if game is not None]
     selections = [selection for selections in game_selections if selections is not None
                   for selection in selections]
 
-    player_character_choices = [{'player': selection['entrant']['name'],
+    player_character_choices = [{'player': derive_name(selection['entrant']['name']),
                                  'character': chars[selection['selectionValue']]}
                                 for selection in selections]
     player_char_freqs = {}
