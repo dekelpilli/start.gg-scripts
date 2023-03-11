@@ -1,4 +1,5 @@
 import json
+import logging
 
 import requests
 from mergedeep import merge, Strategy
@@ -146,16 +147,42 @@ def derive_name(entrant_name):
         return sections[1].strip()
 
 
+def log_missing_data(data_list, name, expected_keys):
+    non_none_data = list(filter(lambda x: x is not None, data_list))
+    diff = len(data_list) - len(non_none_data)
+    if diff:
+        logging.warning("Received %s '%s', and %s were missing data.", len(data_list), name, diff)
+
+    for key in expected_keys:
+        key_nones = len(list(filter(lambda x: x.get(key) is None, non_none_data)))
+        if key_nones:
+            logging.warning("Of %s '%s' with data, %s were missing data for the '%s' key.",
+                            len(non_none_data),
+                            name,
+                            key_nones,
+                            key)
+
+
 def build_data(slug):
     headers = {"Authorization": "Bearer <your token here>"}
     response = query_data(slug, headers)
     event = response['event']
     chars = {character['id']: character['name'] for character in event['videogame']['characters']}
     node_games = [node['games'] for node in event['sets']['nodes'] if node['games'] is not None]
-    game_selections = [game['selections'] for games in node_games
-                       for game in games if game is not None]
+
+    log_missing_data(event['sets']['nodes'], 'sets', ['games'])
+
+    games = [game for games in node_games
+             for game in games if game is not None]
+
+    log_missing_data(games, 'games', ['selections'])
+
+    game_selections = [game['selections'] for game in games]
+
     selections = [selection for selections in game_selections if selections is not None
                   for selection in selections]
+
+    log_missing_data(node_games, 'games', [])
 
     player_character_choices = [{'player': derive_name(selection['entrant']['name']),
                                  'character': chars[selection['selectionValue']]}
